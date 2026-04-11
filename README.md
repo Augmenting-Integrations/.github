@@ -1,124 +1,95 @@
 # Organization `.github` Repository
 
-This repository defines **organization-wide defaults** for:
+This repository is the public-facing organization defaults repo.
 
-- AI-first issue intake and planning
-- Pull request standards
-- Shared GitHub Actions workflow templates
-- Governance docs (security, support, contribution expectations)
-- Organization automation (team newsletters + platform drift reports)
+Its job is to define the things GitHub can inherit or surface organization-wide:
 
-If a repo in this organization does not define its own equivalent file/template, these defaults apply automatically.
+- issue intake templates
+- pull request templates
+- community health files
+- reusable workflow templates
+- profile content
 
----
+It is not the long-term home for privileged operational tooling.
 
-## What this repo currently standardizes
+## What belongs here
 
-### 1) AI-native intake and implementation flow
+The files in this repository are intentionally the low-friction, low-privilege defaults that make sense to keep in a public org `.github` repo:
 
-- Minimal-text issue templates designed for non-developers
-- Explicit AI handling flow:
-  1. AI validates issue context quality
-  2. AI asks grouped clarification questions until actionable
-  3. AI posts a concrete implementation proposal
-  4. Human approves proposal
-  5. AI begins implementation and opens PR to `dev` (or `main` if no `dev` branch)
-
-See:
-
-- `.github/ISSUE_TEMPLATE/ai-feature-request.yml`
-- `.github/ISSUE_TEMPLATE/ai-bug-report.yml`
-- `.github/ISSUE_TEMPLATE/ai-ops-task.yml`
-- `.github/ISSUE_TEMPLATE/config.yml`
-
-### 2) Standard PR expectations
-
-- AI-linked PR checklist
-- Risk + rollout + validation expectations
-- Conventional commits reminder
-
-See:
+- `.github/ISSUE_TEMPLATE/`
+  Minimal, AI-friendly issue intake for feature requests, bugs, and ops tasks.
 
 - `.github/PULL_REQUEST_TEMPLATE.md`
+  Standard PR expectations for validation, rollout, and risk communication.
 
-### 3) Org-level automation workflows (starter implementations)
+- `.github/CONTRIBUTING.md`
+- `.github/SECURITY.md`
+- `.github/SUPPORT.md`
+  Shared governance and contributor guidance.
 
-- **Newsletter aggregation workflow** (scheduled / manual)
-  - Discovers teams and repo membership from the GitHub API
-  - Uses `.github/reporting/teams.json` only as optional team metadata / allowlist input
-  - Publishes one GitHub Discussion per team titled `{Team Name} Weekly Update`
-  - Collects default-branch activity across discovered repos
-  - Includes last-week git history for `dev` and `main` branches when they exist
-  - Flags `CHANGELOG.md` drift
-  - Uploads workflow artifacts and leaves an alerting stub for later
+- `workflow-templates/`
+  Starter workflow templates for repositories in the organization.
 
-- **Platform drift workflow** (scheduled / manual)
-  - Auto-discovers all non-archived org repositories visible to `GH_TOKEN`
-  - Checks repo hygiene signals across discovered repos
-  - Reports file/config drift for workflows, CHANGELOG, CODEOWNERS, SECURITY, Renovate, and Sonar config
-  - Uses explicit check/cross markers and definitions so the current scope is clear
-  - Publishes the report as a GitHub Discussion in this repo
-  - Uploads workflow artifacts and leaves an alerting stub for later
+- `profile/README.md`
+  The organization profile content shown publicly on GitHub.
 
-See:
+## What moved out
 
-- `.github/workflows/org-newsletter.yml`
-- `.github/workflows/platform-drift.yml`
+The org reporting and audit automation has been extracted into `.auto/`.
 
-### 4) Reusable workflow templates for repos
+That split is intentional. The reporting system:
 
-- Baseline CI quality gates
-- AI implementation orchestration scaffold
+- needs broader GitHub token scope
+- benefits from living in a private repo
+- changes faster than the community-health defaults
+- is operational automation, not GitHub inheritance scaffolding
 
-See:
+The extracted project currently lives in:
 
-- `workflow-templates/baseline-quality-gates.yml`
-- `workflow-templates/ai-implementation-runner.yml`
+- `.auto/README.md`
+- `.auto/.github/workflows/`
+- `.auto/scripts/`
+- `.auto/config/`
+- `.auto/docs/`
 
----
+The goal is to lift that directory into its own repository with minimal rework.
 
-## Discussion-first reporting
-
-Reports now publish to **GitHub Discussions** instead of email or a website.
-
-- Team newsletters should publish to an `Announcements` discussion category.
-- Platform and standards reports should publish to a `Platform Reports` discussion category.
-- Alerting is left as an explicit stub so you can wire Teams, email, or another downstream channel later without changing the report generation flow.
-
-Setup inputs live in:
-
-- `.env.example`
-- `.github/reporting/teams.json`
-- `docs/DISCUSSION_REPORTING.md`
-
-For organization discussions, set `REPORTING_DISCUSSION_SOURCE_REPOSITORY` to the repo configured as the organization's discussion source repository.
-
----
-
-## Recommended next implementation milestones
-
-1. Enable Discussions in this repo or enable organization discussions using this repo as the source repository.
-2. Create the `Announcements` and `Platform Reports` discussion categories.
-3. Optionally populate `.github/reporting/teams.json` with team allowlist entries or discussion mentions.
-4. Copy `.env.example` values into GitHub Actions variables and secrets.
-5. Wire the alerting stub to GitHub Teams, email, or another downstream notifier when ready.
-6. Wire AI issue triage bot (Copilot/Codex/GitHub App) to enforce clarification loop + proposal gating.
-7. Add reusable deployment workflow templates that enforce `dev -> staging -> production` promotion rules.
-
----
-
-## Repo structure
+## Current structure
 
 ```text
 .github/
   ISSUE_TEMPLATE/
-  workflows/
-  reporting/
-workflow-templates/
-.env.example
+  CONTRIBUTING.md
+  PULL_REQUEST_TEMPLATE.md
+  SECURITY.md
+  SUPPORT.md
 profile/
   README.md
-scripts/
-docs/
-  DISCUSSION_REPORTING.md
+workflow-templates/
+.auto/
+  README.md
+  .github/workflows/
+  config/
+  docs/
+  scripts/
 ```
+
+## Guidance
+
+If something is primarily about:
+
+- repo defaults
+- contributor UX
+- org profile presentation
+- reusable starter templates
+
+it belongs here.
+
+If something is primarily about:
+
+- org-wide inventory or reporting
+- privileged tokens or secret management
+- automated standards enforcement
+- cross-repo operational workflows
+
+it should live in the extracted automation project instead.
