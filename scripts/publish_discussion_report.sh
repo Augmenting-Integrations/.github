@@ -85,6 +85,7 @@ repo_query='query($owner: String!, $name: String!) {
       nodes {
         id
         name
+        slug
       }
     }
   }
@@ -104,7 +105,15 @@ if jq -e '.errors' >/dev/null <<<"$repo_response"; then
 fi
 
 repo_id="$(jq -r '.data.repository.id // empty' <<<"$repo_response")"
-category_id="$(jq -r --arg category "$category" '.data.repository.discussionCategories.nodes[] | select(.name == $category) | .id' <<<"$repo_response")"
+category_count="$(jq '.data.repository.discussionCategories.nodes | length' <<<"$repo_response")"
+category_id="$(
+  jq -r \
+    --arg category "$category" \
+    '.data.repository.discussionCategories.nodes[]
+      | select((.name | ascii_downcase) == ($category | ascii_downcase) or .slug == $category)
+      | .id' \
+    <<<"$repo_response"
+)"
 
 if [[ -z "$repo_id" ]]; then
   echo "Unable to resolve repository id for $repo." >&2
@@ -112,9 +121,25 @@ if [[ -z "$repo_id" ]]; then
 fi
 
 if [[ -z "$category_id" ]]; then
-  echo "Discussion category \"$category\" was not found in $repo." >&2
-  echo "Available categories:" >&2
-  jq -r '.data.repository.discussionCategories.nodes[].name' <<<"$repo_response" >&2
+  if [[ "$category_count" -eq 0 ]]; then
+    cat >&2 <<EOF
+No discussion categories were found in ${repo}.
+
+GitHub Discussions must be enabled on the target repository, and at least one discussion category must exist before the workflow can publish reports.
+Create the category in the Discussions UI, or update the workflow variables to match an existing category.
+Expected category input: "${category}"
+EOF
+  else
+    echo "Discussion category \"$category\" was not found in $repo." >&2
+    echo "Available categories (name | slug):" >&2
+    jq -r '.data.repository.discussionCategories.nodes[] | "- \(.name) | \(.slug)"' <<<"$repo_response" >&2
+    cat >&2 <<EOF
+
+Update the GitHub Actions variable to match one of the names or slugs above:
+- NEWSLETTER_DISCUSSION_CATEGORY
+- PLATFORM_DRIFT_DISCUSSION_CATEGORY
+EOF
+  fi
   exit 1
 fi
 
