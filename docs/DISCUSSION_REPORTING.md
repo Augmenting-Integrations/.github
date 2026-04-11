@@ -48,9 +48,11 @@ Notes:
 
 - Runs on a weekly schedule or manual dispatch.
 - Discovers teams and their repositories via the GitHub API.
+- Publishes one discussion per team titled `{Team Name} Weekly Update`.
 - Collects commits on each repo's default branch for the requested window.
 - Counts conventional commit signals for `feat`, `fix`, `perf`, and `refactor`.
 - Detects whether `CHANGELOG.md` exists and whether it changed in the same window.
+- Adds last-week git history for `dev` (`staging`) and `main` (`production`) branches where they exist.
 - Publishes the report body to a GitHub Discussion in `Announcements`.
 
 Notes:
@@ -77,6 +79,7 @@ Notes:
 
 - If `GH_TOKEN` can only see public repositories, the platform drift report will only cover public repositories.
 - Team mapping is for the newsletter flow; platform drift is organization-wide by default.
+- The current platform drift table is a real presence audit, not yet a deep policy or behavior audit. A green check means the file or config was found in a standard location; it does not yet mean the content is correct or enforced.
 
 ## Alerting stub
 

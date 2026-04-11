@@ -57,11 +57,17 @@ fi
 
 mkdir -p "$out_dir"
 
+teams_dir="${out_dir}/teams"
 report_md="${out_dir}/newsletter.md"
-report_jsonl="${out_dir}/newsletter-repos.jsonl"
-report_json="${out_dir}/newsletter.json"
+index_json="${out_dir}/newsletter-index.json"
+team_index_jsonl="${out_dir}/newsletter-teams.jsonl"
+
+mkdir -p "$teams_dir"
+: >"$team_index_jsonl"
 
 generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+since_ts="${since}T00:00:00Z"
+until_ts="${until}T23:59:59Z"
 
 gh_array() {
   local endpoint="$1"
@@ -85,15 +91,45 @@ has_path() {
   gh api "/repos/${repo}/contents/${path}?ref=${branch}" >/dev/null 2>&1
 }
 
-{
-  echo "# Team Engineering Newsletter"
-  echo
-  echo "Window: ${since} to ${until}"
-  echo "Generated at: ${generated_at}"
-  echo
-} >"$report_md"
+branch_exists() {
+  local repo="$1"
+  local branch="$2"
+  gh api "/repos/${repo}/branches/${branch}" >/dev/null 2>&1
+}
 
-: >"$report_jsonl"
+commits_for_ref() {
+  local repo="$1"
+  local ref="$2"
+  gh_array "/repos/${repo}/commits?sha=${ref}&since=${since_ts}&until=${until_ts}&per_page=100"
+}
+
+append_branch_history() {
+  local report_file="$1"
+  local repo="$2"
+  local branch="$3"
+  local environment_name="$4"
+
+  if ! branch_exists "$repo" "$branch"; then
+    echo "- \`${branch}\` (${environment_name}): branch not present" >>"$report_file"
+    printf 'missing\t0\n'
+    return 0
+  fi
+
+  local branch_commits_json
+  local branch_commit_count
+  branch_commits_json="$(commits_for_ref "$repo" "$branch")"
+  branch_commit_count="$(jq 'length' <<<"$branch_commits_json")"
+
+  if [[ "$branch_commit_count" -eq 0 ]]; then
+    echo "- \`${branch}\` (${environment_name}): no commits in window" >>"$report_file"
+    printf 'no-commits\t0\n'
+    return 0
+  fi
+
+  echo "- \`${branch}\` (${environment_name}): ${branch_commit_count} commits" >>"$report_file"
+  jq -r '.[0:10][]? | "  - `\(.sha[0:7])` \(.commit.author.date[0:10]): \(.commit.message | split("\n")[0])"' <<<"$branch_commits_json" >>"$report_file"
+  printf 'active\t%s\n' "$branch_commit_count"
+}
 
 team_override_count=0
 if [[ -n "$team_map" && -f "$team_map" ]]; then
@@ -102,33 +138,42 @@ fi
 
 if [[ "$team_override_count" -gt 0 ]]; then
   discovery_mode="api-repos-for-configured-teams"
-  team_source="$(jq -c '
-    .teams[]
-    | {
-        slug: (.slug // (.name | ascii_downcase | gsub("[^a-z0-9]+"; "-"))),
-        name: (.name // .slug),
-        discussion_team_mention: (.discussion_team_mention // "")
-      }
-  ' "$team_map")"
+  mapfile -t team_source < <(
+    jq -cr '
+      .teams[]
+      | {
+          slug: (.slug // (.name | ascii_downcase | gsub("[^a-z0-9]+"; "-"))),
+          name: (.name // .slug),
+          discussion_team_mention: (.discussion_team_mention // "")
+        }
+    ' "$team_map"
+  )
 else
   discovery_mode="api-team-discovery"
   teams_json="$(gh_array "/orgs/${owner}/teams?per_page=100")"
-  team_source="$(jq -cr '
-    .[]
-    | {
-        slug: .slug,
-        name: .name,
-        discussion_team_mention: ""
-      }
-  ' <<<"$teams_json")"
+  mapfile -t team_source < <(
+    jq -cr '
+      .[]
+      | {
+          slug: .slug,
+          name: .name,
+          discussion_team_mention: ""
+        }
+    ' <<<"$teams_json"
+  )
 fi
 
-if [[ -z "$team_source" ]]; then
-  cat >>"$report_md" <<EOF
+if [[ "${#team_source[@]}" -eq 0 ]]; then
+  cat >"$report_md" <<EOF
+# Team Weekly Updates
+
+Window: ${since} to ${until}
+Generated at: ${generated_at}
+Discovery mode: ${discovery_mode}
+
 ## Status
 
 - No teams were discovered.
-- Discovery mode: ${discovery_mode}
 - If you expected private-team coverage, ensure \`GH_TOKEN\` can read organization team metadata and private repositories.
 EOF
 
@@ -137,7 +182,22 @@ EOF
     --arg since "$since" \
     --arg until "$until" \
     --arg discovery_mode "$discovery_mode" \
-    '{report_type: "team-newsletter", generated_at: $generated_at, since: $since, until: $until, discovery_mode: $discovery_mode, teams: []}' >"$report_json"
+    '{
+      report_type: "team-newsletter-index",
+      generated_at: $generated_at,
+      since: $since,
+      until: $until,
+      discovery_mode: $discovery_mode,
+      summary: {
+        team_count: 0,
+        repo_count: 0,
+        commit_count: 0,
+        feature_count: 0,
+        fix_count: 0,
+        changelog_drift_count: 0
+      },
+      teams: []
+    }' >"$index_json"
   exit 0
 fi
 
@@ -146,14 +206,17 @@ org_total_features=0
 org_total_fixes=0
 org_missing_changelog=0
 processed_team_count=0
+processed_repo_count=0
 
-while IFS= read -r team_json; do
+for team_json in "${team_source[@]}"; do
   [[ -z "$team_json" ]] && continue
+
   team_name="$(jq -r '.name' <<<"$team_json")"
   team_slug="$(jq -r '.slug' <<<"$team_json")"
   team_mention="$(jq -r '.discussion_team_mention // empty' <<<"$team_json")"
+
   repos_json="$(gh_array "/orgs/${owner}/teams/${team_slug}/repos?per_page=100")"
-  readarray -t team_repos < <(
+  mapfile -t team_repos < <(
     jq -r '
       .[]
       | select((.archived // false) | not)
@@ -161,42 +224,34 @@ while IFS= read -r team_json; do
       | .full_name
     ' <<<"$repos_json" | awk '!seen[$0]++'
   )
-  repo_count="${#team_repos[@]}"
 
-  if [[ "$repo_count" -eq 0 ]]; then
+  if [[ "${#team_repos[@]}" -eq 0 ]]; then
     continue
   fi
 
-  processed_team_count=$((processed_team_count + 1))
+  team_body_md="$(mktemp)"
+  team_repo_jsonl="$(mktemp)"
+  : >"$team_body_md"
+  : >"$team_repo_jsonl"
 
-  {
-    echo "## ${team_name}"
-    echo
-    if [[ -n "$team_mention" ]]; then
-      echo "${team_mention}"
-      echo
-    fi
-  } >>"$report_md"
-
+  team_repo_count=0
   team_total_commits=0
   team_total_features=0
   team_total_fixes=0
   team_missing_changelog=()
 
-  while IFS= read -r repo_ref; do
-    full_repo="$repo_ref"
-    if [[ "$full_repo" != */* ]]; then
-      full_repo="${owner}/${full_repo}"
+  for full_repo in "${team_repos[@]}"; do
+    repo_meta="$(gh api "/repos/${full_repo}" 2>/dev/null || true)"
+    if [[ -z "$repo_meta" ]] || ! jq -e '.default_branch' >/dev/null 2>&1 <<<"$repo_meta"; then
+      continue
     fi
 
-    repo_meta="$(gh api "/repos/${full_repo}")"
+    team_repo_count=$((team_repo_count + 1))
+    processed_repo_count=$((processed_repo_count + 1))
     default_branch="$(jq -r '.default_branch' <<<"$repo_meta")"
 
-    commits_endpoint="/repos/${full_repo}/commits?sha=${default_branch}&since=${since}T00:00:00Z&until=${until}T23:59:59Z&per_page=100"
-    changelog_endpoint="/repos/${full_repo}/commits?sha=${default_branch}&path=CHANGELOG.md&since=${since}T00:00:00Z&until=${until}T23:59:59Z&per_page=100"
-
-    commits_json="$(gh_array "$commits_endpoint")"
-    changelog_commits_json="$(gh_array "$changelog_endpoint")"
+    commits_json="$(commits_for_ref "$full_repo" "$default_branch")"
+    changelog_commits_json="$(gh_array "/repos/${full_repo}/commits?sha=${default_branch}&path=CHANGELOG.md&since=${since_ts}&until=${until_ts}&per_page=100")"
 
     commit_count="$(jq 'length' <<<"$commits_json")"
     feature_count="$(jq '[.[].commit.message | split("\n")[0] | ascii_downcase | select(test("^feat(\\(.+\\))?!?: "))] | length' <<<"$commits_json")"
@@ -204,9 +259,9 @@ while IFS= read -r team_json; do
     perf_count="$(jq '[.[].commit.message | split("\n")[0] | ascii_downcase | select(test("^perf(\\(.+\\))?!?: "))] | length' <<<"$commits_json")"
     refactor_count="$(jq '[.[].commit.message | split("\n")[0] | ascii_downcase | select(test("^refactor(\\(.+\\))?!?: "))] | length' <<<"$commits_json")"
 
-    highlights="$(jq -r '[.[].commit.message | split("\n")[0] | select(test("^(feat|fix|perf|refactor)(\\(.+\\))?!?: "; "i"))][0:3][]' <<<"$commits_json")"
+    highlights="$(jq -r '[.[].commit.message | split("\n")[0] | select(test("^(feat|fix|perf|refactor)(\\(.+\\))?!?: "; "i"))][0:5][]' <<<"$commits_json")"
     if [[ -z "$highlights" ]]; then
-      highlights="$(jq -r '.[0:3][]?.commit.message | split("\n")[0]' <<<"$commits_json")"
+      highlights="$(jq -r '.[0:5][]?.commit.message | split("\n")[0]' <<<"$commits_json")"
     fi
 
     if has_path "$full_repo" "$default_branch" "CHANGELOG.md"; then
@@ -228,7 +283,6 @@ while IFS= read -r team_json; do
     team_total_commits=$((team_total_commits + commit_count))
     team_total_features=$((team_total_features + feature_count))
     team_total_fixes=$((team_total_fixes + fix_count))
-
     org_total_commits=$((org_total_commits + commit_count))
     org_total_features=$((org_total_features + feature_count))
     org_total_fixes=$((org_total_fixes + fix_count))
@@ -237,18 +291,27 @@ while IFS= read -r team_json; do
       echo "### \`${full_repo}\`"
       echo
       echo "- Default branch: \`${default_branch}\`"
-      echo "- Commits in window: ${commit_count}"
-      echo "- Conventional commit signals: feat=${feature_count}, fix=${fix_count}, perf=${perf_count}, refactor=${refactor_count}"
+      echo "- Default-branch commits in window: ${commit_count}"
+      echo "- Conventional commit signals on \`${default_branch}\`: feat=${feature_count}, fix=${fix_count}, perf=${perf_count}, refactor=${refactor_count}"
       echo "- CHANGELOG.md: ${changelog_status}"
       if [[ -n "$highlights" ]]; then
-        echo "- Highlights:"
+        echo "- Highlights on \`${default_branch}\`:"
         while IFS= read -r subject; do
           [[ -z "$subject" ]] && continue
           echo "  - ${subject}"
         done <<<"$highlights"
       fi
-      echo
-    } >>"$report_md"
+      echo "- Last week of git history on deployment branches:"
+    } >>"$team_body_md"
+
+    IFS=$'\t' read -r dev_branch_status dev_branch_commit_count < <(
+      append_branch_history "$team_body_md" "$full_repo" "dev" "staging"
+    )
+    IFS=$'\t' read -r main_branch_status main_branch_commit_count < <(
+      append_branch_history "$team_body_md" "$full_repo" "main" "production"
+    )
+
+    echo >>"$team_body_md"
 
     jq -nc \
       --arg team_slug "$team_slug" \
@@ -256,12 +319,16 @@ while IFS= read -r team_json; do
       --arg repo "$full_repo" \
       --arg default_branch "$default_branch" \
       --arg changelog_status "$changelog_status" \
+      --arg dev_branch_status "$dev_branch_status" \
+      --arg main_branch_status "$main_branch_status" \
       --argjson commit_count "$commit_count" \
       --argjson feature_count "$feature_count" \
       --argjson fix_count "$fix_count" \
       --argjson perf_count "$perf_count" \
       --argjson refactor_count "$refactor_count" \
-      --argjson highlights "$(jq -Rc 'split("\n") | map(select(length > 0))' <<<"$highlights")" \
+      --argjson dev_branch_commit_count "$dev_branch_commit_count" \
+      --argjson main_branch_commit_count "$main_branch_commit_count" \
+      --argjson highlights "$(jq -Rsc 'split("\n") | map(select(length > 0))' <<<"$highlights")" \
       '{
         team_slug: $team_slug,
         team_name: $team_name,
@@ -273,33 +340,131 @@ while IFS= read -r team_json; do
         perf_count: $perf_count,
         refactor_count: $refactor_count,
         changelog_status: $changelog_status,
+        dev_branch: {
+          status: $dev_branch_status,
+          commit_count: $dev_branch_commit_count
+        },
+        main_branch: {
+          status: $main_branch_status,
+          commit_count: $main_branch_commit_count
+        },
         highlights: $highlights
-      }' >>"$report_jsonl"
-  done < <(printf '%s\n' "${team_repos[@]}")
+      }' >>"$team_repo_jsonl"
+  done
+
+  if [[ "$team_repo_count" -eq 0 ]]; then
+    rm -f "$team_body_md" "$team_repo_jsonl"
+    continue
+  fi
+
+  processed_team_count=$((processed_team_count + 1))
+
+  team_markdown_file="${teams_dir}/${team_slug}.md"
+  team_json_file="${teams_dir}/${team_slug}.json"
 
   {
-    echo "### Team Summary"
+    echo "# ${team_name} Weekly Update"
     echo
-    echo "- Repositories covered: ${repo_count}"
-    echo "- Commits in window: ${team_total_commits}"
+    echo "Window: ${since} to ${until}"
+    echo "Generated at: ${generated_at}"
+    echo "Discovery mode: ${discovery_mode}"
+    echo
+    if [[ -n "$team_mention" ]]; then
+      echo "${team_mention}"
+      echo
+    fi
+    echo "## Executive Summary"
+    echo
+    echo "- Repositories covered: ${team_repo_count}"
+    echo "- Default-branch commits in window: ${team_total_commits}"
     echo "- Features shipped: ${team_total_features}"
     echo "- Bugs fixed: ${team_total_fixes}"
     if [[ "${#team_missing_changelog[@]}" -gt 0 ]]; then
       echo "- Repositories with code changes but no CHANGELOG.md update:"
       printf '  - %s\n' "${team_missing_changelog[@]}"
     else
-      echo "- CHANGELOG.md status: no drift detected in this window"
+      echo "- CHANGELOG.md drift: no issues detected in this window"
     fi
     echo
-  } >>"$report_md"
-done < <(printf '%s\n' "$team_source")
+    echo "## Repository Updates"
+    echo
+    cat "$team_body_md"
+  } >"$team_markdown_file"
+
+  jq -s \
+    --arg generated_at "$generated_at" \
+    --arg since "$since" \
+    --arg until "$until" \
+    --arg discovery_mode "$discovery_mode" \
+    --arg team_slug "$team_slug" \
+    --arg team_name "$team_name" \
+    --arg team_mention "$team_mention" \
+    --arg markdown_file "$team_markdown_file" \
+    --argjson repo_count "$team_repo_count" \
+    --argjson commit_count "$team_total_commits" \
+    --argjson feature_count "$team_total_features" \
+    --argjson fix_count "$team_total_fixes" \
+    --argjson changelog_drift_count "${#team_missing_changelog[@]}" \
+    '{
+      report_type: "team-weekly-update",
+      generated_at: $generated_at,
+      since: $since,
+      until: $until,
+      discovery_mode: $discovery_mode,
+      team: {
+        slug: $team_slug,
+        name: $team_name,
+        discussion_team_mention: $team_mention
+      },
+      summary: {
+        repo_count: $repo_count,
+        commit_count: $commit_count,
+        feature_count: $feature_count,
+        fix_count: $fix_count,
+        changelog_drift_count: $changelog_drift_count
+      },
+      markdown_file: $markdown_file,
+      repos: .
+    }' "$team_repo_jsonl" >"$team_json_file"
+
+  jq -nc \
+    --arg slug "$team_slug" \
+    --arg name "$team_name" \
+    --arg discussion_team_mention "$team_mention" \
+    --arg markdown_file "$team_markdown_file" \
+    --arg json_file "$team_json_file" \
+    --argjson repo_count "$team_repo_count" \
+    --argjson commit_count "$team_total_commits" \
+    --argjson feature_count "$team_total_features" \
+    --argjson fix_count "$team_total_fixes" \
+    --argjson changelog_drift_count "${#team_missing_changelog[@]}" \
+    '{
+      slug: $slug,
+      name: $name,
+      discussion_team_mention: $discussion_team_mention,
+      markdown_file: $markdown_file,
+      json_file: $json_file,
+      repo_count: $repo_count,
+      commit_count: $commit_count,
+      feature_count: $feature_count,
+      fix_count: $fix_count,
+      changelog_drift_count: $changelog_drift_count
+    }' >>"$team_index_jsonl"
+
+  rm -f "$team_body_md" "$team_repo_jsonl"
+done
 
 if [[ "$processed_team_count" -eq 0 ]]; then
-  cat >>"$report_md" <<EOF
+  cat >"$report_md" <<EOF
+# Team Weekly Updates
+
+Window: ${since} to ${until}
+Generated at: ${generated_at}
+Discovery mode: ${discovery_mode}
+
 ## Status
 
 - No teams with visible repositories were discovered.
-- Discovery mode: ${discovery_mode}
 - If you expected private-team coverage, ensure \`GH_TOKEN\` can read organization team metadata and private repositories.
 EOF
 
@@ -308,22 +473,44 @@ EOF
     --arg since "$since" \
     --arg until "$until" \
     --arg discovery_mode "$discovery_mode" \
-    '{report_type: "team-newsletter", generated_at: $generated_at, since: $since, until: $until, discovery_mode: $discovery_mode, teams: []}' >"$report_json"
+    '{
+      report_type: "team-newsletter-index",
+      generated_at: $generated_at,
+      since: $since,
+      until: $until,
+      discovery_mode: $discovery_mode,
+      summary: {
+        team_count: 0,
+        repo_count: 0,
+        commit_count: 0,
+        feature_count: 0,
+        fix_count: 0,
+        changelog_drift_count: 0
+      },
+      teams: []
+    }' >"$index_json"
   exit 0
 fi
 
-summary_line="Covered ${processed_team_count} teams with ${org_total_commits} commits in total. Features: ${org_total_features}. Fixes: ${org_total_fixes}. Repos with CHANGELOG drift: ${org_missing_changelog}."
+summary_line="Covered ${processed_team_count} teams across ${processed_repo_count} repositories. Default-branch commits: ${org_total_commits}. Features: ${org_total_features}. Fixes: ${org_total_fixes}. Repos with CHANGELOG drift: ${org_missing_changelog}."
 
-tmp_md="$(mktemp)"
 {
-  echo "# Executive Summary"
+  echo "# Team Weekly Updates"
+  echo
+  echo "Window: ${since} to ${until}"
+  echo "Generated at: ${generated_at}"
+  echo "Discovery mode: ${discovery_mode}"
+  echo
+  echo "## Executive Summary"
   echo
   echo "- ${summary_line}"
-  echo "- Discovery mode: ${discovery_mode}"
   echo
-  cat "$report_md"
-} >"$tmp_md"
-mv "$tmp_md" "$report_md"
+  echo "## Team Reports"
+  echo
+  jq -r '
+    "- \(.name): \(.markdown_file)"
+  ' "$team_index_jsonl"
+} >"$report_md"
 
 jq -s \
   --arg generated_at "$generated_at" \
@@ -331,35 +518,18 @@ jq -s \
   --arg until "$until" \
   --arg discovery_mode "$discovery_mode" \
   '{
-    report_type: "team-newsletter",
+    report_type: "team-newsletter-index",
     generated_at: $generated_at,
     since: $since,
     until: $until,
     discovery_mode: $discovery_mode,
     summary: {
-      team_count: ([.[].team_slug] | unique | length),
-      repo_count: length,
+      team_count: length,
+      repo_count: (map(.repo_count) | add // 0),
       commit_count: (map(.commit_count) | add // 0),
       feature_count: (map(.feature_count) | add // 0),
       fix_count: (map(.fix_count) | add // 0),
-      changelog_drift_count: (map(select(.changelog_status != "updated")) | map(select(.commit_count > 0)) | length)
+      changelog_drift_count: (map(.changelog_drift_count) | add // 0)
     },
-    teams: (
-      group_by(.team_slug)
-      | map({
-          slug: .[0].team_slug,
-          name: .[0].team_name,
-          repos: map({
-            repo: .repo,
-            default_branch: .default_branch,
-            commit_count: .commit_count,
-            feature_count: .feature_count,
-            fix_count: .fix_count,
-            perf_count: .perf_count,
-            refactor_count: .refactor_count,
-            changelog_status: .changelog_status,
-            highlights: .highlights
-          })
-        })
-    )
-  }' "$report_jsonl" >"$report_json"
+    teams: .
+  }' "$team_index_jsonl" >"$index_json"

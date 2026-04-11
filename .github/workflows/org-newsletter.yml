@@ -74,32 +74,55 @@ jobs:
             --owner "${{ steps.config.outputs.owner }}" \
             --out-dir out
 
-      - name: Publish discussion
+      - name: Publish team discussions
         id: publish
         shell: bash
         run: |
           set -euo pipefail
           export GH_TOKEN="${GH_TOKEN:-$FALLBACK_GITHUB_TOKEN}"
-          title="Team Newsletter: ${{ steps.config.outputs.since }} to ${{ steps.config.outputs.until }}"
-          url="$(bash scripts/publish_discussion_report.sh \
-            --title "$title" \
-            --category "${{ steps.config.outputs.category }}" \
-            --body-file out/newsletter.md \
-            --repo "${{ steps.config.outputs.owner }}/${{ steps.config.outputs.discussion_source_repo }}" \
-            --url-output out/newsletter-discussion-url.txt \
-            --number-output out/newsletter-discussion-number.txt)"
-          echo "title=$title" >>"$GITHUB_OUTPUT"
-          echo "discussion_url=$url" >>"$GITHUB_OUTPUT"
+          published_count=0
+          : > out/published-team-discussions.tsv
+
+          while IFS=$'\t' read -r team_name team_slug markdown_file; do
+            [[ -z "$team_name" ]] && continue
+            title="${team_name} Weekly Update"
+            url="$(bash scripts/publish_discussion_report.sh \
+              --title "$title" \
+              --category "${{ steps.config.outputs.category }}" \
+              --body-file "$markdown_file" \
+              --repo "${{ steps.config.outputs.owner }}/${{ steps.config.outputs.discussion_source_repo }}")"
+            printf '%s\t%s\t%s\t%s\n' "$team_name" "$team_slug" "$title" "$url" >> out/published-team-discussions.tsv
+            published_count=$((published_count + 1))
+          done < <(
+            jq -r '.teams[] | [.name, .slug, .markdown_file] | @tsv' out/newsletter-index.json
+          )
+
+          echo "published_count=$published_count" >>"$GITHUB_OUTPUT"
 
       - name: Write alerting stub
         shell: bash
         run: |
           set -euo pipefail
-          bash scripts/report_alert_stub.sh \
-            --kind newsletter \
-            --title "${{ steps.publish.outputs.title }}" \
-            --discussion-url "${{ steps.publish.outputs.discussion_url }}" \
-            --output-file out/newsletter-alerting-stub.md
+          {
+            echo "# Alerting Stub"
+            echo
+            echo "- Report kind: newsletter"
+            echo "- Discussions published: ${{ steps.publish.outputs.published_count }}"
+            echo "- Alerting enabled: ${ALERTING_STUB_ENABLED:-false}"
+            echo "- Note: ${ALERTING_STUB_NOTE:-Wire a downstream notifier here later.}"
+            echo
+            if [[ -s out/published-team-discussions.tsv ]]; then
+              echo "## Discussions"
+              while IFS=$'\t' read -r team_name team_slug title url; do
+                echo "- ${team_name}: ${url}"
+              done < out/published-team-discussions.tsv
+            else
+              echo "No team discussions were published in this run."
+            fi
+            echo
+            echo "This workflow intentionally stops at discussion publication for now."
+            echo "Replace this stub with Microsoft Teams, email, or another downstream notifier when ready."
+          } > out/newsletter-alerting-stub.md
 
       - name: Upload report artifacts
         uses: actions/upload-artifact@v4
@@ -111,19 +134,27 @@ jobs:
       - name: Write job summary
         shell: bash
         run: |
-          discovery_mode="$(jq -r '.discovery_mode // "unknown"' out/newsletter.json)"
-          team_count="$(jq -r '.summary.team_count // 0' out/newsletter.json)"
-          repo_count="$(jq -r '.summary.repo_count // 0' out/newsletter.json)"
+          discovery_mode="$(jq -r '.discovery_mode // "unknown"' out/newsletter-index.json)"
+          team_count="$(jq -r '.summary.team_count // 0' out/newsletter-index.json)"
+          repo_count="$(jq -r '.summary.repo_count // 0' out/newsletter-index.json)"
+          published_count="${{ steps.publish.outputs.published_count }}"
           {
             echo "## Newsletter Published"
             echo
-            echo "- Discussion: ${{ steps.publish.outputs.discussion_url }}"
             echo "- Window: ${{ steps.config.outputs.since }} to ${{ steps.config.outputs.until }}"
             echo "- Discussion source repository: \`${{ steps.config.outputs.owner }}/${{ steps.config.outputs.discussion_source_repo }}\`"
             echo "- Category: \`${{ steps.config.outputs.category }}\`"
             echo "- Team discovery mode: \`${discovery_mode}\`"
             echo "- Teams covered: ${team_count}"
             echo "- Team/repo rows covered: ${repo_count}"
+            echo "- Discussions published: ${published_count}"
+            echo
+            if [[ -s out/published-team-discussions.tsv ]]; then
+              echo "## Published Discussions"
+              while IFS=$'\t' read -r team_name team_slug title url; do
+                echo "- [${team_name}](${url})"
+              done < out/published-team-discussions.tsv
+            fi
             echo
             echo "Alerting is intentionally stubbed. See \`out/newsletter-alerting-stub.md\` in the workflow artifact."
           } >>"$GITHUB_STEP_SUMMARY"

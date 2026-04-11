@@ -189,12 +189,38 @@ missing_workflows_count="$(jq -s 'map(select(.workflow_count == 0)) | length' "$
   echo "- Missing Sonar config: ${missing_sonar_count}"
   echo "- Missing workflow directory or workflow files: ${missing_workflows_count}"
   echo
+  cat <<'EOF'
+## Check Scope
+
+These are real repository-content checks, but they are currently shallow presence checks.
+
+- A green check means the expected file or config was found in at least one standard location.
+- A red X means it was not found in the checked locations.
+- A green check does not yet mean the content is correct, enforced, or complete.
+
+## Legend
+
+- `✅` present in a checked standard location
+- `❌` not found in the checked locations
+
+## Drift Definitions
+
+- `Workflows`: at least one workflow file exists under `.github/workflows`
+- `README`: `README.md` exists at repo root
+- `CHANGELOG`: `CHANGELOG.md` exists at repo root
+- `CODEOWNERS`: one of `.github/CODEOWNERS`, `CODEOWNERS`, or `docs/CODEOWNERS` exists
+- `SECURITY`: one of `.github/SECURITY.md`, `SECURITY.md`, or `docs/SECURITY.md` exists
+- `Renovate`: one of `.github/renovate.json5`, `.github/renovate.json`, `renovate.json5`, or `renovate.json` exists
+- `Sonar`: `sonar-project.properties` or `.sonarcloud.properties` exists
+
+EOF
   echo "## Repository Matrix"
   echo
   echo "| Repo | Branch | Workflows | README | CHANGELOG | CODEOWNERS | SECURITY | Renovate | Sonar |"
   echo "| --- | --- | ---: | --- | --- | --- | --- | --- | --- |"
   jq -r '
-    "| \(.repo) | \(.default_branch) | \(.workflow_count) | \(.readme_present | if . then "yes" else "no" end) | \(.changelog_present | if . then "yes" else "no" end) | \(.codeowners_present | if . then "yes" else "no" end) | \(.security_present | if . then "yes" else "no" end) | \(.renovate_present | if . then "yes" else "no" end) | \(.sonar_present | if . then "yes" else "no" end) |"
+    def mark(v): if v then "✅" else "❌" end;
+    "| \(.repo) | \(.default_branch) | \(if .workflow_count > 0 then "✅ \(.workflow_count)" else "❌" end) | \(mark(.readme_present)) | \(mark(.changelog_present)) | \(mark(.codeowners_present)) | \(mark(.security_present)) | \(mark(.renovate_present)) | \(mark(.sonar_present)) |"
   ' "$report_jsonl"
   echo
   cat <<'EOF'

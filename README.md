@@ -46,15 +46,17 @@ See:
 - **Newsletter aggregation workflow** (scheduled / manual)
   - Discovers teams and repo membership from the GitHub API
   - Uses `.github/reporting/teams.json` only as optional team metadata / allowlist input
-  - Collects commit activity across discovered repos
+  - Publishes one GitHub Discussion per team titled `{Team Name} Weekly Update`
+  - Collects default-branch activity across discovered repos
+  - Includes last-week git history for `dev` and `main` branches when they exist
   - Flags `CHANGELOG.md` drift
-  - Publishes the report as a GitHub Discussion in this repo
   - Uploads workflow artifacts and leaves an alerting stub for later
 
 - **Platform drift workflow** (scheduled / manual)
   - Auto-discovers all non-archived org repositories visible to `GH_TOKEN`
   - Checks repo hygiene signals across discovered repos
   - Reports file/config drift for workflows, CHANGELOG, CODEOWNERS, SECURITY, Renovate, and Sonar config
+  - Uses explicit check/cross markers and definitions so the current scope is clear
   - Publishes the report as a GitHub Discussion in this repo
   - Uploads workflow artifacts and leaves an alerting stub for later
 
@@ -97,7 +99,7 @@ For organization discussions, set `REPORTING_DISCUSSION_SOURCE_REPOSITORY` to th
 
 1. Enable Discussions in this repo or enable organization discussions using this repo as the source repository.
 2. Create the `Announcements` and `Platform Reports` discussion categories.
-3. Populate `.github/reporting/teams.json` with your real team-to-repo mapping.
+3. Optionally populate `.github/reporting/teams.json` with team allowlist entries or discussion mentions.
 4. Copy `.env.example` values into GitHub Actions variables and secrets.
 5. Wire the alerting stub to GitHub Teams, email, or another downstream notifier when ready.
 6. Wire AI issue triage bot (Copilot/Codex/GitHub App) to enforce clarification loop + proposal gating.
