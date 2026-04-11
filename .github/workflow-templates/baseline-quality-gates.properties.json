@@ -1,0 +1,8 @@
+{
+  "name": "Baseline Quality Gates",
+  "description": "Starter CI workflow for lint/build/test/security/license checks.",
+  "categories": [
+    "Continuous integration",
+    "Code quality"
+  ]
+}

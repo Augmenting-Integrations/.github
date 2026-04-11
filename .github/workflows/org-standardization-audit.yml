@@ -1,0 +1,51 @@
+name: Org Standardization Audit (Dry Run)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 2"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run dry-run audit scaffold
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          cat > out/standardization-audit.md <<'REPORT'
+          # Standardization Audit (Dry Run)
+
+          This report is a scaffold for integrating your existing AI standardization runner.
+
+          ## Planned checks
+          - Required branch protections configured
+          - Required status checks configured
+          - Standard CI workflow present
+          - Security scan workflow present
+          - License checks present
+          - CHANGELOG.md present and updated recently
+          - CODEOWNERS present
+
+          ## Status
+          - Dry-run scaffold completed successfully.
+          - Integrate Codex/Claude-driven audit logic in this workflow.
+          REPORT
+
+          jq -n '{status:"ok", mode:"dry-run", generated_at: now|todate}' > out/standardization-audit.json
+
+      - name: Upload audit artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: org-standardization-audit
+          path: out/

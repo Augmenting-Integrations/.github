@@ -1,0 +1,8 @@
+{
+  "name": "AI Implementation Runner",
+  "description": "Starter workflow to trigger AI implementation after explicit approval.",
+  "categories": [
+    "Automation",
+    "Code review"
+  ]
+}
