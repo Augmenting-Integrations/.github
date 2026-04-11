@@ -111,13 +111,19 @@ jobs:
       - name: Write job summary
         shell: bash
         run: |
+          discovery_mode="$(jq -r '.discovery_mode // "unknown"' out/newsletter.json)"
+          team_count="$(jq -r '.summary.team_count // 0' out/newsletter.json)"
+          repo_count="$(jq -r '.summary.repo_count // 0' out/newsletter.json)"
           {
             echo "## Newsletter Published"
             echo
             echo "- Discussion: ${{ steps.publish.outputs.discussion_url }}"
             echo "- Window: ${{ steps.config.outputs.since }} to ${{ steps.config.outputs.until }}"
             echo "- Discussion source repository: \`${{ steps.config.outputs.owner }}/${{ steps.config.outputs.discussion_source_repo }}\`"
-            echo "- Team map: \`${{ steps.config.outputs.team_map }}\`"
+            echo "- Category: \`${{ steps.config.outputs.category }}\`"
+            echo "- Team discovery mode: \`${discovery_mode}\`"
+            echo "- Teams covered: ${team_count}"
+            echo "- Team/repo rows covered: ${repo_count}"
             echo
             echo "Alerting is intentionally stubbed. See \`out/newsletter-alerting-stub.md\` in the workflow artifact."
           } >>"$GITHUB_STEP_SUMMARY"

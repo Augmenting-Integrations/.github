@@ -21,7 +21,6 @@ jobs:
       REPORTING_OWNER: ${{ vars.REPORTING_OWNER }}
       REPORTING_DISCUSSION_SOURCE_REPOSITORY: ${{ vars.REPORTING_DISCUSSION_SOURCE_REPOSITORY }}
       REPORTING_REPOSITORY: ${{ vars.REPORTING_REPOSITORY }}
-      REPORTING_TEAM_MAP_PATH: ${{ vars.REPORTING_TEAM_MAP_PATH }}
       PLATFORM_DRIFT_DISCUSSION_CATEGORY: ${{ vars.PLATFORM_DRIFT_DISCUSSION_CATEGORY }}
       REPORT_ARTIFACT_RETENTION_DAYS: ${{ vars.REPORT_ARTIFACT_RETENTION_DAYS }}
       ALERTING_STUB_ENABLED: ${{ vars.ALERTING_STUB_ENABLED }}
@@ -37,7 +36,6 @@ jobs:
           set -euo pipefail
           echo "owner=${REPORTING_OWNER:-$GITHUB_REPOSITORY_OWNER}" >>"$GITHUB_OUTPUT"
           echo "discussion_source_repo=${REPORTING_DISCUSSION_SOURCE_REPOSITORY:-${REPORTING_REPOSITORY:-${GITHUB_REPOSITORY#*/}}}" >>"$GITHUB_OUTPUT"
-          echo "team_map=${REPORTING_TEAM_MAP_PATH:-.github/reporting/teams.json}" >>"$GITHUB_OUTPUT"
           echo "category=${PLATFORM_DRIFT_DISCUSSION_CATEGORY:-Platform Reports}" >>"$GITHUB_OUTPUT"
           echo "artifact_retention=${REPORT_ARTIFACT_RETENTION_DAYS:-30}" >>"$GITHUB_OUTPUT"
 
@@ -47,7 +45,6 @@ jobs:
           set -euo pipefail
           export GH_TOKEN="${GH_TOKEN:-$FALLBACK_GITHUB_TOKEN}"
           bash scripts/generate_platform_drift_report.sh \
-            --team-map "${{ steps.config.outputs.team_map }}" \
             --owner "${{ steps.config.outputs.owner }}" \
             --current-repo "${GITHUB_REPOSITORY}" \
             --out-dir out
@@ -89,12 +86,16 @@ jobs:
       - name: Write job summary
         shell: bash
         run: |
+          discovery_mode="$(jq -r '.discovery_mode // "unknown"' out/platform-drift.json)"
+          repo_count="$(jq -r '.summary.repo_count // 0' out/platform-drift.json)"
           {
             echo "## Platform Drift Report Published"
             echo
             echo "- Discussion: ${{ steps.publish.outputs.discussion_url }}"
             echo "- Discussion source repository: \`${{ steps.config.outputs.owner }}/${{ steps.config.outputs.discussion_source_repo }}\`"
-            echo "- Team map: \`${{ steps.config.outputs.team_map }}\`"
+            echo "- Category: \`${{ steps.config.outputs.category }}\`"
+            echo "- Discovery mode: \`${discovery_mode}\`"
+            echo "- Repositories checked: ${repo_count}"
             echo
             echo "Alerting is intentionally stubbed. See \`out/platform-drift-alerting-stub.md\` in the workflow artifact."
           } >>"$GITHUB_STEP_SUMMARY"

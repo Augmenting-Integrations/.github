@@ -106,14 +106,17 @@ fi
 
 repo_id="$(jq -r '.data.repository.id // empty' <<<"$repo_response")"
 category_count="$(jq '.data.repository.discussionCategories.nodes | length' <<<"$repo_response")"
-category_id="$(
+find_category_id() {
+  local lookup="$1"
   jq -r \
-    --arg category "$category" \
+    --arg category "$lookup" \
     '.data.repository.discussionCategories.nodes[]
       | select((.name | ascii_downcase) == ($category | ascii_downcase) or .slug == $category)
       | .id' \
     <<<"$repo_response"
-)"
+}
+
+category_id="$(find_category_id "$category")"
 
 if [[ -z "$repo_id" ]]; then
   echo "Unable to resolve repository id for $repo." >&2

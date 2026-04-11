@@ -7,7 +7,7 @@ Usage:
   generate_newsletter_report.sh \
     --since YYYY-MM-DD \
     --until YYYY-MM-DD \
-    --team-map .github/reporting/teams.json \
+    [--team-map .github/reporting/teams.json] \
     --owner octo-org \
     --out-dir out
 EOF
@@ -50,7 +50,7 @@ done
 
 : "${GH_TOKEN:?GH_TOKEN is required}"
 
-if [[ -z "$since" || -z "$until" || -z "$team_map" || -z "$owner" || -z "$out_dir" ]]; then
+if [[ -z "$since" || -z "$until" || -z "$owner" || -z "$out_dir" ]]; then
   usage
   exit 1
 fi
@@ -65,7 +65,15 @@ generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 gh_array() {
   local endpoint="$1"
-  if ! gh api --paginate "$endpoint" 2>/dev/null | jq -s 'add // []'; then
+  if ! gh api --paginate "$endpoint" 2>/dev/null | jq -s '
+    if length == 0 then
+      []
+    elif all(.[]; type == "array") then
+      add
+    else
+      []
+    end
+  '; then
     printf '[]\n'
   fi
 }
@@ -87,21 +95,49 @@ has_path() {
 
 : >"$report_jsonl"
 
-team_count="$(jq '.teams | length' "$team_map" 2>/dev/null || echo 0)"
+team_override_count=0
+if [[ -n "$team_map" && -f "$team_map" ]]; then
+  team_override_count="$(jq '.teams | length' "$team_map" 2>/dev/null || echo 0)"
+fi
 
-if [[ "$team_count" -eq 0 ]]; then
-  cat >>"$report_md" <<'EOF'
+if [[ "$team_override_count" -gt 0 ]]; then
+  discovery_mode="api-repos-for-configured-teams"
+  team_source="$(jq -c '
+    .teams[]
+    | {
+        slug: (.slug // (.name | ascii_downcase | gsub("[^a-z0-9]+"; "-"))),
+        name: (.name // .slug),
+        discussion_team_mention: (.discussion_team_mention // "")
+      }
+  ' "$team_map")"
+else
+  discovery_mode="api-team-discovery"
+  teams_json="$(gh_array "/orgs/${owner}/teams?per_page=100")"
+  team_source="$(jq -cr '
+    .[]
+    | {
+        slug: .slug,
+        name: .name,
+        discussion_team_mention: ""
+      }
+  ' <<<"$teams_json")"
+fi
+
+if [[ -z "$team_source" ]]; then
+  cat >>"$report_md" <<EOF
 ## Status
 
-- No teams are configured yet.
-- Populate `.github/reporting/teams.json` and rerun this workflow.
+- No teams were discovered.
+- Discovery mode: ${discovery_mode}
+- If you expected private-team coverage, ensure \`GH_TOKEN\` can read organization team metadata and private repositories.
 EOF
 
   jq -n \
     --arg generated_at "$generated_at" \
     --arg since "$since" \
     --arg until "$until" \
-    '{report_type: "team-newsletter", generated_at: $generated_at, since: $since, until: $until, teams: []}' >"$report_json"
+    --arg discovery_mode "$discovery_mode" \
+    '{report_type: "team-newsletter", generated_at: $generated_at, since: $since, until: $until, discovery_mode: $discovery_mode, teams: []}' >"$report_json"
   exit 0
 fi
 
@@ -109,12 +145,29 @@ org_total_commits=0
 org_total_features=0
 org_total_fixes=0
 org_missing_changelog=0
+processed_team_count=0
 
 while IFS= read -r team_json; do
+  [[ -z "$team_json" ]] && continue
   team_name="$(jq -r '.name' <<<"$team_json")"
-  team_slug="$(jq -r '.slug // (.name | ascii_downcase | gsub("[^a-z0-9]+"; "-"))' <<<"$team_json")"
+  team_slug="$(jq -r '.slug' <<<"$team_json")"
   team_mention="$(jq -r '.discussion_team_mention // empty' <<<"$team_json")"
-  repo_count="$(jq '.repos | length' <<<"$team_json")"
+  repos_json="$(gh_array "/orgs/${owner}/teams/${team_slug}/repos?per_page=100")"
+  readarray -t team_repos < <(
+    jq -r '
+      .[]
+      | select((.archived // false) | not)
+      | select((.disabled // false) | not)
+      | .full_name
+    ' <<<"$repos_json" | awk '!seen[$0]++'
+  )
+  repo_count="${#team_repos[@]}"
+
+  if [[ "$repo_count" -eq 0 ]]; then
+    continue
+  fi
+
+  processed_team_count=$((processed_team_count + 1))
 
   {
     echo "## ${team_name}"
@@ -124,14 +177,6 @@ while IFS= read -r team_json; do
       echo
     fi
   } >>"$report_md"
-
-  if [[ "$repo_count" -eq 0 ]]; then
-    cat >>"$report_md" <<'EOF'
-- No repositories are mapped to this team yet.
-
-EOF
-    continue
-  fi
 
   team_total_commits=0
   team_total_features=0
@@ -230,7 +275,7 @@ EOF
         changelog_status: $changelog_status,
         highlights: $highlights
       }' >>"$report_jsonl"
-  done < <(jq -r '.repos[]' <<<"$team_json")
+  done < <(printf '%s\n' "${team_repos[@]}")
 
   {
     echo "### Team Summary"
@@ -247,15 +292,34 @@ EOF
     fi
     echo
   } >>"$report_md"
-done < <(jq -c '.teams[]' "$team_map")
+done < <(printf '%s\n' "$team_source")
 
-summary_line="Covered ${team_count} teams with ${org_total_commits} commits in total. Features: ${org_total_features}. Fixes: ${org_total_fixes}. Repos with CHANGELOG drift: ${org_missing_changelog}."
+if [[ "$processed_team_count" -eq 0 ]]; then
+  cat >>"$report_md" <<EOF
+## Status
+
+- No teams with visible repositories were discovered.
+- Discovery mode: ${discovery_mode}
+- If you expected private-team coverage, ensure \`GH_TOKEN\` can read organization team metadata and private repositories.
+EOF
+
+  jq -n \
+    --arg generated_at "$generated_at" \
+    --arg since "$since" \
+    --arg until "$until" \
+    --arg discovery_mode "$discovery_mode" \
+    '{report_type: "team-newsletter", generated_at: $generated_at, since: $since, until: $until, discovery_mode: $discovery_mode, teams: []}' >"$report_json"
+  exit 0
+fi
+
+summary_line="Covered ${processed_team_count} teams with ${org_total_commits} commits in total. Features: ${org_total_features}. Fixes: ${org_total_fixes}. Repos with CHANGELOG drift: ${org_missing_changelog}."
 
 tmp_md="$(mktemp)"
 {
   echo "# Executive Summary"
   echo
   echo "- ${summary_line}"
+  echo "- Discovery mode: ${discovery_mode}"
   echo
   cat "$report_md"
 } >"$tmp_md"
@@ -265,11 +329,13 @@ jq -s \
   --arg generated_at "$generated_at" \
   --arg since "$since" \
   --arg until "$until" \
+  --arg discovery_mode "$discovery_mode" \
   '{
     report_type: "team-newsletter",
     generated_at: $generated_at,
     since: $since,
     until: $until,
+    discovery_mode: $discovery_mode,
     summary: {
       team_count: ([.[].team_slug] | unique | length),
       repo_count: length,

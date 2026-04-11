@@ -44,14 +44,16 @@ See:
 ### 3) Org-level automation workflows (starter implementations)
 
 - **Newsletter aggregation workflow** (scheduled / manual)
-  - Reads `.github/reporting/teams.json`
-  - Collects commit activity across mapped repos
+  - Discovers teams and repo membership from the GitHub API
+  - Uses `.github/reporting/teams.json` only as optional team metadata / allowlist input
+  - Collects commit activity across discovered repos
   - Flags `CHANGELOG.md` drift
   - Publishes the report as a GitHub Discussion in this repo
   - Uploads workflow artifacts and leaves an alerting stub for later
 
 - **Platform drift workflow** (scheduled / manual)
-  - Checks repo hygiene signals across mapped repos
+  - Auto-discovers all non-archived org repositories visible to `GH_TOKEN`
+  - Checks repo hygiene signals across discovered repos
   - Reports file/config drift for workflows, CHANGELOG, CODEOWNERS, SECURITY, Renovate, and Sonar config
   - Publishes the report as a GitHub Discussion in this repo
   - Uploads workflow artifacts and leaves an alerting stub for later

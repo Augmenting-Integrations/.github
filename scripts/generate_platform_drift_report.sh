@@ -5,24 +5,18 @@ usage() {
   cat <<'EOF' >&2
 Usage:
   generate_platform_drift_report.sh \
-    --team-map .github/reporting/teams.json \
     --owner octo-org \
     --current-repo octo-org/.github \
     --out-dir out
 EOF
 }
 
-team_map=""
 owner=""
 current_repo=""
 out_dir=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --team-map)
-      team_map="${2:-}"
-      shift 2
-      ;;
     --owner)
       owner="${2:-}"
       shift 2
@@ -44,7 +38,7 @@ done
 
 : "${GH_TOKEN:?GH_TOKEN is required}"
 
-if [[ -z "$team_map" || -z "$owner" || -z "$current_repo" || -z "$out_dir" ]]; then
+if [[ -z "$owner" || -z "$current_repo" || -z "$out_dir" ]]; then
   usage
   exit 1
 fi
@@ -78,22 +72,44 @@ first_existing_path() {
   return 1
 }
 
-readarray -t repo_list < <(
-  if [[ -f "$team_map" ]] && jq -e '.teams | length > 0' "$team_map" >/dev/null 2>&1; then
-    jq -r '.teams[].repos[]' "$team_map" | awk '!seen[$0]++'
+org_repos_json="$(
+  if gh api --paginate "/orgs/${owner}/repos?type=all&per_page=100" 2>/dev/null | jq -s '
+    if length == 0 then
+      []
+    elif all(.[]; type == "array") then
+      add
+    else
+      []
+    end
+  '; then
+    :
   else
-    printf '%s\n' "$current_repo"
+    printf '[]\n'
   fi
+)"
+
+readarray -t repo_list < <(
+  jq -r '
+    .[]
+    | select((.archived // false) | not)
+    | select((.disabled // false) | not)
+    | .full_name
+  ' <<<"$org_repos_json"
 )
 
 if [[ "${#repo_list[@]}" -eq 0 ]]; then
   repo_list=("$current_repo")
+  discovery_mode="current-repo-fallback"
+else
+  discovery_mode="organization-wide"
 fi
 
 {
   echo "# Platform Drift Report"
   echo
   echo "Generated at: ${generated_at}"
+  echo "Discovery mode: ${discovery_mode}"
+  echo "Organization owner: ${owner}"
   echo
   echo "This report is discussion-first and intentionally read-only."
   echo
@@ -107,7 +123,10 @@ for repo_ref in "${repo_list[@]}"; do
     full_repo="${owner}/${full_repo}"
   fi
 
-  repo_meta="$(gh api "/repos/${full_repo}")"
+  repo_meta="$(gh api "/repos/${full_repo}" 2>/dev/null || true)"
+  if [[ -z "$repo_meta" ]] || ! jq -e '.default_branch' >/dev/null 2>&1 <<<"$repo_meta"; then
+    continue
+  fi
   default_branch="$(jq -r '.default_branch' <<<"$repo_meta")"
 
   readme_path="$(first_existing_path "$full_repo" "$default_branch" "README.md" || true)"
@@ -160,6 +179,7 @@ missing_workflows_count="$(jq -s 'map(select(.workflow_count == 0)) | length' "$
 {
   echo "## Summary"
   echo
+  echo "- Discovery mode: ${discovery_mode}"
   echo "- Repositories checked: ${checked_count}"
   echo "- Missing README.md: ${missing_readme_count}"
   echo "- Missing CHANGELOG.md: ${missing_changelog_count}"
@@ -192,9 +212,13 @@ EOF
 
 jq -s \
   --arg generated_at "$generated_at" \
+  --arg discovery_mode "$discovery_mode" \
+  --arg owner "$owner" \
   '{
     report_type: "platform-drift",
     generated_at: $generated_at,
+    discovery_mode: $discovery_mode,
+    owner: $owner,
     summary: {
       repo_count: length,
       missing_readme_count: (map(select(.readme_present | not)) | length),
