@@ -45,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           export GH_TOKEN="${GH_TOKEN:-$FALLBACK_GITHUB_TOKEN}"
-          scripts/generate_platform_drift_report.sh \
+          bash scripts/generate_platform_drift_report.sh \
             --team-map "${{ steps.config.outputs.team_map }}" \
             --owner "${{ steps.config.outputs.owner }}" \
             --current-repo "${GITHUB_REPOSITORY}" \
@@ -58,7 +58,7 @@ jobs:
           set -euo pipefail
           export GH_TOKEN="${GH_TOKEN:-$FALLBACK_GITHUB_TOKEN}"
           title="Platform Drift Report: $(date -u +%F)"
-          url="$(scripts/publish_discussion_report.sh \
+          url="$(bash scripts/publish_discussion_report.sh \
             --title "$title" \
             --category "${{ steps.config.outputs.category }}" \
             --body-file out/platform-drift.md \
@@ -72,7 +72,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          scripts/report_alert_stub.sh \
+          bash scripts/report_alert_stub.sh \
             --kind platform-drift \
             --title "${{ steps.publish.outputs.title }}" \
             --discussion-url "${{ steps.publish.outputs.discussion_url }}" \
