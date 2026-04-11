@@ -1,0 +1,76 @@
+name: Org Team Newsletter
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Collect changes since this date (YYYY-MM-DD)"
+        required: false
+      until:
+        description: "Collect changes until this date (YYYY-MM-DD)"
+        required: false
+  schedule:
+    - cron: "0 14 * * 1"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate team summary draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          SINCE="${{ github.event.inputs.since }}"
+          UNTIL="${{ github.event.inputs.until }}"
+          if [[ -z "${SINCE}" ]]; then
+            SINCE="$(date -u -d '7 days ago' +%F)"
+          fi
+          if [[ -z "${UNTIL}" ]]; then
+            UNTIL="$(date -u +%F)"
+          fi
+
+          echo "# Team Engineering Newsletter" > out/newsletter.md
+          echo "" >> out/newsletter.md
+          echo "Window: ${SINCE} to ${UNTIL}" >> out/newsletter.md
+          echo "" >> out/newsletter.md
+
+          # TODO: replace with teams.yaml driven repo grouping.
+          # Example org query:
+          # gh api /orgs/${GITHUB_REPOSITORY_OWNER}/repos --paginate
+          echo "## Status" >> out/newsletter.md
+          echo "- Workflow scaffold is active." >> out/newsletter.md
+          echo "- Next step: add repo-to-team mapping and AI summarization stage." >> out/newsletter.md
+          echo "- Next step: compare CHANGELOG.md deltas and flag missing updates." >> out/newsletter.md
+
+      - name: Upload newsletter artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: team-newsletter
+          path: out/newsletter.md
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: summarize
+    if: ${{ always() && needs.summarize.result == 'success' }}
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: team-newsletter
+          path: out
+
+      - name: Placeholder publish step
+        run: |
+          echo "Implement S3 upload + email delivery here."
+          echo "Expected secrets: AWS role ARN, bucket, region, email target(s)."

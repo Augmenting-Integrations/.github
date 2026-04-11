@@ -1,0 +1,13 @@
+name: Baseline Quality Gates
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Run lint/build/test/security/license checks here"

@@ -1,0 +1,36 @@
+name: AI Feature Request
+about: Minimal-input feature request for AI-assisted delivery
+labels: ["ai-intake", "feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Mention `@copilot` or `@codex` in your first comment.
+
+        AI flow:
+        1) Validate whether context is sufficient
+        2) Ask grouped clarification questions if needed
+        3) Post a PROPOSAL
+        4) Wait for your explicit approval to implement
+  - type: input
+    id: objective
+    attributes:
+      label: What outcome do you want?
+      placeholder: "Example: Users can export invoices as CSV"
+    validations:
+      required: true
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Priority
+      options:
+        - P1 - urgent
+        - P2 - soon
+        - P3 - normal
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints (optional)
+      placeholder: "Compliance, deadline, cost, or technical limits"

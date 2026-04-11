@@ -1,0 +1,24 @@
+name: AI Ops / Platform Task
+about: Request infra, pipeline, deployment, or standards work
+labels: ["ai-intake", "ops"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Mention `@copilot` or `@codex` in your first comment.
+
+        AI should propose a plan and ask for approval before making changes.
+  - type: input
+    id: target
+    attributes:
+      label: Which repo/system is affected?
+      placeholder: "repo-name, environment, service"
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Desired result
+      placeholder: "What should be true when this is complete?"
+    validations:
+      required: true

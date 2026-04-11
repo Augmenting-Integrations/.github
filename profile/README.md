@@ -1,27 +1,29 @@
 # Augmenting Integrations
 
-**Software development and integration. Modern software that scales.**
+We build **AI-accelerated software systems** with production-grade engineering discipline.
 
-Building APIs, web applications, and automation tools with clean code and smart architecture. Serverless-first on AWS, no unnecessary complexity.
+Our teams blend:
 
----
+- AI-assisted implementation (Copilot/Codex/agentic workflows)
+- Strong CI/CD quality gates
+- AWS-first cloud architecture
+- Security, compliance, and operational maturity by default
 
-## What We Build
+## What we optimize for
 
-| Focus                   | Description |
-|-------------------------|-------------|
-| **Custom APIs**         | Serverless REST APIs on AWS — authentication, data processing, real-time endpoints |
-| **Web Applications**    | React and Vue SPAs with automated CI/CD, deployed to CloudFront |
-| **Libraries & CLIs**    | Python packages published to PyPI, deployable as serverless APIs with zero operational overhead |
-| **Zero-Ops Automation** | AWS Lambda functions that run on a schedule, automated code dependency and security updates, automated backups, automated deployments, automated testing
+- Fast iteration with controlled risk
+- Standardized delivery patterns across repositories
+- High trust deployments to staging and production
+- Clear, auditable engineering workflows
 
-## Customer Sites
+## Core capabilities
 
-| Client | URL |
-|--------|-----|
-| Landline Scrubber | [landlinescrubber.com](https://landlinescrubber.com) |
+- Serverless APIs and event-driven systems on AWS
+- Web apps with automated testing and deployment
+- Infrastructure as Code with protected promotion flows
+- Internal platform tooling for team velocity and governance
 
-## Links
+## Learn more
 
-- [augmentingintegrations.com](https://augmentingintegrations.com)
-- [GitHub](https://github.com/augmentingintegrations)
+- Website: [augmentingintegrations.com](https://augmentingintegrations.com)
+- GitHub: [github.com/augmentingintegrations](https://github.com/augmentingintegrations)
