@@ -125,8 +125,10 @@ if [[ -z "$category_id" ]]; then
     cat >&2 <<EOF
 No discussion categories were found in ${repo}.
 
-GitHub Discussions must be enabled on the target repository, and at least one discussion category must exist before the workflow can publish reports.
-Create the category in the Discussions UI, or update the workflow variables to match an existing category.
+If you are publishing to organization discussions, this repository must be the organization's configured source repository.
+GitHub still creates organization discussions through the source repository's discussion categories.
+Enable discussions on the source repository if needed, and create at least one category in the Discussions UI.
+If the organization uses a different source repository, update REPORTING_DISCUSSION_SOURCE_REPOSITORY (or the legacy REPORTING_REPOSITORY variable).
 Expected category input: "${category}"
 EOF
   else

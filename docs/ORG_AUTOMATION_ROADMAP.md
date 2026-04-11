@@ -18,6 +18,7 @@
    - Repository discussions only, or organization discussions with this repo as source?
    - Which categories are canonical?
    - Do we want pinned "latest report" index discussions?
+   - Which repository is the configured source repository for organization discussions?
 
 5. **SonarQube policy**
    - Which quality gate thresholds by language?

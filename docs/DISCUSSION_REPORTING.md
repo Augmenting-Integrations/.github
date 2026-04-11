@@ -11,6 +11,12 @@ This repo uses **GitHub Discussions as the single publication surface** for news
 3. Copy the values from `.env.example` into GitHub Actions variables and secrets.
 4. Populate `.github/reporting/teams.json` with your team-to-repo mapping.
 
+Important:
+
+- For **organization discussions**, GitHub still uses a **source repository**.
+- This workflow publishes through that source repository because GitHub's discussion creation API requires a repository ID and a category ID from that repository.
+- Set `REPORTING_DISCUSSION_SOURCE_REPOSITORY` to the repo selected in the organization's Discussions settings.
+
 ## Team map format
 
 ```json

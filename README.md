@@ -87,6 +87,8 @@ Setup inputs live in:
 - `.github/reporting/teams.json`
 - `docs/DISCUSSION_REPORTING.md`
 
+For organization discussions, set `REPORTING_DISCUSSION_SOURCE_REPOSITORY` to the repo configured as the organization's discussion source repository.
+
 ---
 
 ## Recommended next implementation milestones
