@@ -6,7 +6,7 @@ This repository defines **organization-wide defaults** for:
 - Pull request standards
 - Shared GitHub Actions workflow templates
 - Governance docs (security, support, contribution expectations)
-- Organization automation (newsletter + standardization audits)
+- Organization automation (team newsletters + platform drift reports)
 
 If a repo in this organization does not define its own equivalent file/template, these defaults apply automatically.
 
@@ -44,19 +44,22 @@ See:
 ### 3) Org-level automation workflows (starter implementations)
 
 - **Newsletter aggregation workflow** (scheduled / manual)
-  - Groups repos by configured team map
-  - Reads commit history + detects `CHANGELOG.md` updates
-  - Produces a markdown report artifact
-  - Optional: upload to S3 + email delivery hook
+  - Reads `.github/reporting/teams.json`
+  - Collects commit activity across mapped repos
+  - Flags `CHANGELOG.md` drift
+  - Publishes the report as a GitHub Discussion in this repo
+  - Uploads workflow artifacts and leaves an alerting stub for later
 
-- **Standardization audit dry-run workflow** (scheduled / manual)
-  - Runs periodic checks to measure repo alignment with your standards
-  - Produces JSON + markdown artifacts
+- **Platform drift workflow** (scheduled / manual)
+  - Checks repo hygiene signals across mapped repos
+  - Reports file/config drift for workflows, CHANGELOG, CODEOWNERS, SECURITY, Renovate, and Sonar config
+  - Publishes the report as a GitHub Discussion in this repo
+  - Uploads workflow artifacts and leaves an alerting stub for later
 
 See:
 
 - `.github/workflows/org-newsletter.yml`
-- `.github/workflows/org-standardization-audit.yml`
+- `.github/workflows/platform-drift.yml`
 
 ### 4) Reusable workflow templates for repos
 
@@ -65,39 +68,36 @@ See:
 
 See:
 
-- `.github/workflow-templates/baseline-quality-gates.yml`
-- `.github/workflow-templates/ai-implementation-runner.yml`
+- `workflow-templates/baseline-quality-gates.yml`
+- `workflow-templates/ai-implementation-runner.yml`
 
 ---
 
-## SonarQube vs your existing pipelines
+## Discussion-first reporting
 
-Short answer: **do not replace your existing pipelines with SonarQube**.
+Reports now publish to **GitHub Discussions** instead of email or a website.
 
-Use SonarQube as an **additional static quality lens**, not as a pipeline replacement.
+- Team newsletters should publish to an `Announcements` discussion category.
+- Platform and standards reports should publish to a `Platform Reports` discussion category.
+- Alerting is left as an explicit stub so you can wire Teams, email, or another downstream channel later without changing the report generation flow.
 
-- Keep existing status checks for lint/build/test/security/license/acceptance because they validate runtime and delivery behavior.
-- Add SonarQube for deeper code-quality metrics (maintainability, hotspots, coverage trends, duplication, issue triage).
-- Gate merges on SonarQube quality gates only after calibration, to avoid blocking on noisy defaults.
+Setup inputs live in:
 
-Suggested layering:
-
-1. Existing CI/CD quality and security gates (required)
-2. SonarQube scan and quality gate (initially informational)
-3. Promote SonarQube gate to required after baseline tuning per language stack
+- `.env.example`
+- `.github/reporting/teams.json`
+- `docs/DISCUSSION_REPORTING.md`
 
 ---
 
 ## Recommended next implementation milestones
 
-1. Configure org secrets/variables for newsletter delivery:
-   - AWS role to assume
-   - S3 bucket/prefix
-   - SMTP or SES integration details
-2. Build a `teams.yaml` map for repo-to-team grouping
-3. Wire AI issue triage bot (Copilot/Codex/GitHub App) to enforce clarification loop + proposal gating
-4. Add reusable deployment workflow templates that enforce `dev -> staging -> production` promotion rules
-5. Add branch-aware PR target logic (`dev` if exists else `main`) in automation bot
+1. Enable Discussions in this repo or enable organization discussions using this repo as the source repository.
+2. Create the `Announcements` and `Platform Reports` discussion categories.
+3. Populate `.github/reporting/teams.json` with your real team-to-repo mapping.
+4. Copy `.env.example` values into GitHub Actions variables and secrets.
+5. Wire the alerting stub to GitHub Teams, email, or another downstream notifier when ready.
+6. Wire AI issue triage bot (Copilot/Codex/GitHub App) to enforce clarification loop + proposal gating.
+7. Add reusable deployment workflow templates that enforce `dev -> staging -> production` promotion rules.
 
 ---
 
@@ -107,7 +107,12 @@ Suggested layering:
 .github/
   ISSUE_TEMPLATE/
   workflows/
-  workflow-templates/
+  reporting/
+workflow-templates/
+.env.example
 profile/
   README.md
+scripts/
+docs/
+  DISCUSSION_REPORTING.md
 ```

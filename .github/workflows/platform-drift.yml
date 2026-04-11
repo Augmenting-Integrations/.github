@@ -1,26 +1,19 @@
-name: Org Team Newsletter
+name: Platform Drift Report
 
 on:
   workflow_dispatch:
-    inputs:
-      since:
-        description: "Collect changes since this date (YYYY-MM-DD)"
-        required: false
-      until:
-        description: "Collect changes until this date (YYYY-MM-DD)"
-        required: false
   push:
     branches:
       - main
   schedule:
-    - cron: "17 14 * * 1"
+    - cron: "11 6 * * 2"
 
 permissions:
   contents: read
   discussions: write
 
 jobs:
-  summarize-and-publish:
+  audit-and-publish:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -28,7 +21,7 @@ jobs:
       REPORTING_OWNER: ${{ vars.REPORTING_OWNER }}
       REPORTING_REPOSITORY: ${{ vars.REPORTING_REPOSITORY }}
       REPORTING_TEAM_MAP_PATH: ${{ vars.REPORTING_TEAM_MAP_PATH }}
-      NEWSLETTER_DISCUSSION_CATEGORY: ${{ vars.NEWSLETTER_DISCUSSION_CATEGORY }}
+      PLATFORM_DRIFT_DISCUSSION_CATEGORY: ${{ vars.PLATFORM_DRIFT_DISCUSSION_CATEGORY }}
       REPORT_ARTIFACT_RETENTION_DAYS: ${{ vars.REPORT_ARTIFACT_RETENTION_DAYS }}
       ALERTING_STUB_ENABLED: ${{ vars.ALERTING_STUB_ENABLED }}
       ALERTING_STUB_NOTE: ${{ vars.ALERTING_STUB_NOTE }}
@@ -41,36 +34,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          since_input="${{ github.event.inputs.since }}"
-          until_input="${{ github.event.inputs.until }}"
-
-          if [[ -z "$since_input" ]]; then
-            since_input="$(date -u -d '7 days ago' +%F)"
-          fi
-
-          if [[ -z "$until_input" ]]; then
-            until_input="$(date -u +%F)"
-          fi
-
-          echo "since=$since_input" >>"$GITHUB_OUTPUT"
-          echo "until=$until_input" >>"$GITHUB_OUTPUT"
           echo "owner=${REPORTING_OWNER:-$GITHUB_REPOSITORY_OWNER}" >>"$GITHUB_OUTPUT"
           echo "reporting_repo=${REPORTING_REPOSITORY:-${GITHUB_REPOSITORY#*/}}" >>"$GITHUB_OUTPUT"
           echo "team_map=${REPORTING_TEAM_MAP_PATH:-.github/reporting/teams.json}" >>"$GITHUB_OUTPUT"
-          echo "category=${NEWSLETTER_DISCUSSION_CATEGORY:-Announcements}" >>"$GITHUB_OUTPUT"
+          echo "category=${PLATFORM_DRIFT_DISCUSSION_CATEGORY:-Platform Reports}" >>"$GITHUB_OUTPUT"
           echo "artifact_retention=${REPORT_ARTIFACT_RETENTION_DAYS:-30}" >>"$GITHUB_OUTPUT"
 
-      - name: Generate newsletter report
+      - name: Generate platform drift report
         shell: bash
         run: |
           set -euo pipefail
           export GH_TOKEN="${GH_TOKEN:-$FALLBACK_GITHUB_TOKEN}"
-          scripts/generate_newsletter_report.sh \
-            --since "${{ steps.config.outputs.since }}" \
-            --until "${{ steps.config.outputs.until }}" \
+          scripts/generate_platform_drift_report.sh \
             --team-map "${{ steps.config.outputs.team_map }}" \
             --owner "${{ steps.config.outputs.owner }}" \
+            --current-repo "${GITHUB_REPOSITORY}" \
             --out-dir out
 
       - name: Publish discussion
@@ -79,14 +57,14 @@ jobs:
         run: |
           set -euo pipefail
           export GH_TOKEN="${GH_TOKEN:-$FALLBACK_GITHUB_TOKEN}"
-          title="Team Newsletter: ${{ steps.config.outputs.since }} to ${{ steps.config.outputs.until }}"
+          title="Platform Drift Report: $(date -u +%F)"
           url="$(scripts/publish_discussion_report.sh \
             --title "$title" \
             --category "${{ steps.config.outputs.category }}" \
-            --body-file out/newsletter.md \
+            --body-file out/platform-drift.md \
             --repo "${{ steps.config.outputs.owner }}/${{ steps.config.outputs.reporting_repo }}" \
-            --url-output out/newsletter-discussion-url.txt \
-            --number-output out/newsletter-discussion-number.txt)"
+            --url-output out/platform-drift-discussion-url.txt \
+            --number-output out/platform-drift-discussion-number.txt)"
           echo "title=$title" >>"$GITHUB_OUTPUT"
           echo "discussion_url=$url" >>"$GITHUB_OUTPUT"
 
@@ -95,15 +73,15 @@ jobs:
         run: |
           set -euo pipefail
           scripts/report_alert_stub.sh \
-            --kind newsletter \
+            --kind platform-drift \
             --title "${{ steps.publish.outputs.title }}" \
             --discussion-url "${{ steps.publish.outputs.discussion_url }}" \
-            --output-file out/newsletter-alerting-stub.md
+            --output-file out/platform-drift-alerting-stub.md
 
       - name: Upload report artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: team-newsletter
+          name: platform-drift-report
           retention-days: ${{ steps.config.outputs.artifact_retention }}
           path: out/
 
@@ -111,11 +89,10 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## Newsletter Published"
+            echo "## Platform Drift Report Published"
             echo
             echo "- Discussion: ${{ steps.publish.outputs.discussion_url }}"
-            echo "- Window: ${{ steps.config.outputs.since }} to ${{ steps.config.outputs.until }}"
             echo "- Team map: \`${{ steps.config.outputs.team_map }}\`"
             echo
-            echo "Alerting is intentionally stubbed. See \`out/newsletter-alerting-stub.md\` in the workflow artifact."
+            echo "Alerting is intentionally stubbed. See \`out/platform-drift-alerting-stub.md\` in the workflow artifact."
           } >>"$GITHUB_STEP_SUMMARY"

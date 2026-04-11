@@ -14,10 +14,10 @@
    - Allow auto-merge only for low-risk changes?
    - Require manual merge for IaC production-impacting changes?
 
-4. **Newsletter delivery**
-   - Target email list(s)
-   - S3 location pattern and retention policy
-   - Weekly vs bi-weekly cadence
+4. **Discussion publishing contract**
+   - Repository discussions only, or organization discussions with this repo as source?
+   - Which categories are canonical?
+   - Do we want pinned "latest report" index discussions?
 
 5. **SonarQube policy**
    - Which quality gate thresholds by language?
@@ -29,6 +29,7 @@
 - Add org-level orchestration from this `.github` repo for consistency checks and reporting.
 - Use SonarQube as a supplemental gate integrated into existing CI.
 - Use Renovate for dependency hygiene; enforce lockfile + test passing before auto-merge.
+- Publish newsletters and platform reports to GitHub Discussions first, then fan out alerts later.
 
 ## Implementation phases
 
@@ -41,7 +42,7 @@
 
 - Connect workflows to real org repo inventory.
 - Add AI summarization and changelog drift detection.
-- Add AWS publish path and email delivery.
+- Add GitHub Teams or other downstream alerting on top of discussion publication.
 
 ### Phase 3
 

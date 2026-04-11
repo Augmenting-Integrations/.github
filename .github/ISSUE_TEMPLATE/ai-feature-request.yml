@@ -1,5 +1,5 @@
 name: AI Feature Request
-about: Minimal-input feature request for AI-assisted delivery
+description: Minimal-input feature request for AI-assisted delivery
 labels: ["ai-intake", "feature"]
 body:
   - type: markdown

@@ -1,5 +1,5 @@
 name: AI Bug Report
-about: Minimal-input bug report for AI triage and implementation
+description: Minimal-input bug report for AI triage and implementation
 labels: ["ai-intake", "bug"]
 body:
   - type: markdown

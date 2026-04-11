@@ -3,7 +3,7 @@ name: Baseline Quality Gates
 on:
   pull_request:
   push:
-    branches: [main, dev]
+    branches: [$default-branch, dev]
 
 jobs:
   quality:

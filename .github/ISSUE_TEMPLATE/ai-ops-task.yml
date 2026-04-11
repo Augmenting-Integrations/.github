@@ -1,5 +1,5 @@
 name: AI Ops / Platform Task
-about: Request infra, pipeline, deployment, or standards work
+description: Request infra, pipeline, deployment, or standards work
 labels: ["ai-intake", "ops"]
 body:
   - type: markdown

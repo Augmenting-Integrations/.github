@@ -1,0 +1,15 @@
+# Local environment files
+.env
+
+# Local AI/tooling state
+.agents/
+.codex/
+.ai-shell.toml
+
+# Editor/IDE files
+.idea/
+.vscode/
+
+# OS noise
+.DS_Store
+Thumbs.db

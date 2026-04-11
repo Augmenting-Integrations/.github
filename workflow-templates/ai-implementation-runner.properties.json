@@ -1,6 +1,7 @@
 {
   "name": "AI Implementation Runner",
   "description": "Starter workflow to trigger AI implementation after explicit approval.",
+  "iconName": "octicon dependabot",
   "categories": [
     "Automation",
     "Code review"
