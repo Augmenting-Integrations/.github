@@ -69,9 +69,47 @@ generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 since_ts="${since}T00:00:00Z"
 until_ts="${until}T23:59:59Z"
 
+token_guidance() {
+  cat <<'EOF' >&2
+This newsletter workflow requires GH_TOKEN to be a fine-grained PAT or equivalent with:
+- Resource owner set to the organization
+- Repository access set to all organization repositories
+- Organization permission: Members (read)
+- Repository permissions: Metadata (read), Contents (read), Discussions (write)
+
+If the organization requires PAT approval, make sure the token has been approved before use.
+EOF
+}
+
+gh_api_json() {
+  local endpoint="$1"
+  local purpose="$2"
+  local err_file
+  err_file="$(mktemp)"
+
+  if gh api "$endpoint" 2>"$err_file"; then
+    rm -f "$err_file"
+    return 0
+  fi
+
+  {
+    echo "Failed to ${purpose}."
+    echo "Endpoint: ${endpoint}"
+    cat "$err_file"
+    echo
+    token_guidance
+  } >&2
+  rm -f "$err_file"
+  exit 1
+}
+
 gh_array() {
   local endpoint="$1"
-  if ! gh api --paginate "$endpoint" 2>/dev/null | jq -s '
+  local purpose="$2"
+  local err_file
+  err_file="$(mktemp)"
+
+  if gh api --paginate "$endpoint" 2>"$err_file" | jq -s '
     if length == 0 then
       []
     elif all(.[]; type == "array") then
@@ -80,8 +118,19 @@ gh_array() {
       []
     end
   '; then
-    printf '[]\n'
+    rm -f "$err_file"
+    return 0
   fi
+
+  {
+    echo "Failed to ${purpose}."
+    echo "Endpoint: ${endpoint}"
+    cat "$err_file"
+    echo
+    token_guidance
+  } >&2
+  rm -f "$err_file"
+  exit 1
 }
 
 has_path() {
@@ -100,7 +149,9 @@ branch_exists() {
 commits_for_ref() {
   local repo="$1"
   local ref="$2"
-  gh_array "/repos/${repo}/commits?sha=${ref}&since=${since_ts}&until=${until_ts}&per_page=100"
+  gh_array \
+    "/repos/${repo}/commits?sha=${ref}&since=${since_ts}&until=${until_ts}&per_page=100" \
+    "list commits for ${repo}@${ref}"
 }
 
 append_branch_history() {
@@ -150,7 +201,7 @@ if [[ "$team_override_count" -gt 0 ]]; then
   )
 else
   discovery_mode="api-team-discovery"
-  teams_json="$(gh_array "/orgs/${owner}/teams?per_page=100")"
+  teams_json="$(gh_array "/orgs/${owner}/teams?per_page=100" "list organization teams for ${owner}")"
   mapfile -t team_source < <(
     jq -cr '
       .[]
@@ -215,7 +266,9 @@ for team_json in "${team_source[@]}"; do
   team_slug="$(jq -r '.slug' <<<"$team_json")"
   team_mention="$(jq -r '.discussion_team_mention // empty' <<<"$team_json")"
 
-  repos_json="$(gh_array "/orgs/${owner}/teams/${team_slug}/repos?per_page=100")"
+  repos_json="$(gh_array \
+    "/orgs/${owner}/teams/${team_slug}/repos?per_page=100" \
+    "list repositories for team ${team_slug}")"
   mapfile -t team_repos < <(
     jq -r '
       .[]
@@ -241,17 +294,16 @@ for team_json in "${team_source[@]}"; do
   team_missing_changelog=()
 
   for full_repo in "${team_repos[@]}"; do
-    repo_meta="$(gh api "/repos/${full_repo}" 2>/dev/null || true)"
-    if [[ -z "$repo_meta" ]] || ! jq -e '.default_branch' >/dev/null 2>&1 <<<"$repo_meta"; then
-      continue
-    fi
+    repo_meta="$(gh_api_json "/repos/${full_repo}" "read repository metadata for ${full_repo}")"
 
     team_repo_count=$((team_repo_count + 1))
     processed_repo_count=$((processed_repo_count + 1))
     default_branch="$(jq -r '.default_branch' <<<"$repo_meta")"
 
     commits_json="$(commits_for_ref "$full_repo" "$default_branch")"
-    changelog_commits_json="$(gh_array "/repos/${full_repo}/commits?sha=${default_branch}&path=CHANGELOG.md&since=${since_ts}&until=${until_ts}&per_page=100")"
+    changelog_commits_json="$(gh_array \
+      "/repos/${full_repo}/commits?sha=${default_branch}&path=CHANGELOG.md&since=${since_ts}&until=${until_ts}&per_page=100" \
+      "list CHANGELOG commits for ${full_repo}@${default_branch}")"
 
     commit_count="$(jq 'length' <<<"$commits_json")"
     feature_count="$(jq '[.[].commit.message | split("\n")[0] | ascii_downcase | select(test("^feat(\\(.+\\))?!?: "))] | length' <<<"$commits_json")"
