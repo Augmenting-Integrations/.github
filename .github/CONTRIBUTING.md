@@ -4,9 +4,9 @@ This organization uses AI-assisted delivery with strict quality gates.
 
 ## Required workflow
 
-1. Open an issue from the AI templates.
+1. Open an issue and describe what you need in plain language.
 2. Tag `@copilot` or `@codex`.
-3. AI gathers missing context with grouped questions.
+3. AI triages, classifies, and asks follow-up questions if needed.
 4. AI posts a proposal.
 5. Human explicitly approves proposal.
 6. AI implements and opens PR.

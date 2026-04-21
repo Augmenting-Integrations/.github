@@ -1,0 +1,11 @@
+name: Request
+description: Describe what you need. AI will triage, classify, and ask follow-up questions.
+labels: ["ai-intake"]
+body:
+  - type: textarea
+    id: request
+    attributes:
+      label: What do you need?
+      placeholder: "Bug, feature, infra change, question -- anything. Just describe it."
+    validations:
+      required: true
