@@ -1,9 +1,0 @@
-{
-  "name": "Baseline Quality Gates",
-  "description": "Starter CI workflow for lint/build/test/security/license checks.",
-  "iconName": "octicon shield-check",
-  "categories": [
-    "Continuous integration",
-    "Code quality"
-  ]
-}

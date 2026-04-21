@@ -27,9 +27,6 @@ The files in this repository are intentionally the low-friction, low-privilege d
 - `.github/SUPPORT.md`
   Shared governance and contributor guidance.
 
-- `workflow-templates/`
-  Starter workflow templates for repositories in the organization.
-
 - `profile/README.md`
   The organization profile content shown publicly on GitHub.
 
@@ -65,7 +62,6 @@ The goal is to lift that directory into its own repository with minimal rework.
   SUPPORT.md
 profile/
   README.md
-workflow-templates/
 .auto/
   README.md
   .github/workflows/
