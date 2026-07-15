@@ -1,15 +1,16 @@
 # Augmenting Integrations
 
-We build **AI-accelerated software systems** with production-grade engineering discipline.
+Building **AI-maintained software systems** with production-grade engineering discipline.
 
-Our teams blend:
+This organization blends:
 
 - AI-assisted implementation (Copilot/Codex/agentic workflows)
 - Strong CI/CD quality gates
 - AWS-first cloud architecture
 - Security, compliance, and operational maturity by default
+- AI powered self healing CI/CD
 
-## What we optimize for
+## What this organization optimizes for
 
 - Fast iteration with controlled risk
 - Standardized delivery patterns across repositories
