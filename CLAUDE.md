@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Vision:** the Augmenting Integrations vision is `VISION.md` in the `ai-agency` repository ([on GitHub](https://github.com/Augmenting-Integrations/ai-agency/blob/main/VISION.md)). Read it before you plan a feature, an integration or an architecture change. Never edit it to match a request or the code; an agreed line changes only through a meeting readback (ai-agency `docs/standards/project-vision.md`).
+
 ## What This Repository Is
 
 This is the **organization `.github` repository** for Augmenting Integrations. It defines org-wide GitHub defaults that are inherited across all repositories in the organization. It is **not** an application or service -- it is scaffolding and governance.
